@@ -3,6 +3,7 @@ import logging
 from urllib.parse import urljoin
 
 import celery
+from django.apps import apps
 
 from .. import settings
 
@@ -21,7 +22,9 @@ class PRASSync(object):
     def __call__(self):
         self.load_current_organizations()
 
-        response = settings.session.get(settings.PRAS_URL, headers={'Accept': 'application/json'})
+        session = apps.get_app_config('idm_notification').session
+
+        response = session.get(settings.PRAS_URL, headers={'Accept': 'application/json'})
         response.raise_for_status()
 
         print(list(self.current_organizations_by_id['pras:division']))
@@ -31,7 +34,7 @@ class PRASSync(object):
             try:
                 existing = self.current_organizations_by_id[organization['code_type']][organization['code']]
             except KeyError:
-                response = settings.session.post(urljoin(settings.IDM_CORE_API_URL, 'organization/'), json={
+                response = session.post(urljoin(settings.IDM_CORE_API_URL, 'organization/'), json={
                     'label': organization['name'],
                     'managed': True,
                     'identifiers': [{
@@ -51,7 +54,7 @@ class PRASSync(object):
                         or existing['label'] != organization['full_name']\
                         or existing_tags != organization['tags']:
                     new_tags = (set(existing['tags']) - self.managed_tags) | organization['tags']
-                    settings.session.put(existing['url'], {
+                    session.put(existing['url'], {
                         'label': organization['full_name'],
                         'short_label': organization['name'],
                         'tags': sorted(new_tags),
@@ -63,7 +66,7 @@ class PRASSync(object):
         url = urljoin(settings.IDM_CORE_API_URL, 'organization/')
         while True:
             print("N")
-            response = settings.session.get(url)
+            response = session.get(url)
             response.raise_for_status()
             data = response.json()
             for org in data['results']:
