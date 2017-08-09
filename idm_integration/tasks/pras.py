@@ -22,7 +22,7 @@ class PRASSync(object):
 
     @cached_property
     def session(self):
-        return apps.get_app_config('idm_notification').session
+        return apps.get_app_config('idm_integration').session
 
     def __call__(self):
         self.load_current_organizations()
