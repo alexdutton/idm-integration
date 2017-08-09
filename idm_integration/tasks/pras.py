@@ -4,6 +4,7 @@ from urllib.parse import urljoin
 
 import celery
 from django.apps import apps
+from django.utils.functional import cached_property
 
 from .. import settings
 
@@ -19,12 +20,15 @@ class PRASSync(object):
         self.current_organizations = []
         self.current_organizations_by_id = collections.defaultdict(dict)
 
+    @cached_property
+    def session(self):
+        return apps.get_app_config('idm_notification').session
+
     def __call__(self):
         self.load_current_organizations()
 
-        session = apps.get_app_config('idm_notification').session
 
-        response = session.get(settings.PRAS_URL, headers={'Accept': 'application/json'})
+        response = self.session.get(settings.PRAS_URL, headers={'Accept': 'application/json'})
         response.raise_for_status()
 
         print(list(self.current_organizations_by_id['pras:division']))
@@ -34,7 +38,7 @@ class PRASSync(object):
             try:
                 existing = self.current_organizations_by_id[organization['code_type']][organization['code']]
             except KeyError:
-                response = session.post(urljoin(settings.IDM_CORE_API_URL, 'organization/'), json={
+                response = self.session.post(urljoin(settings.IDM_CORE_API_URL, 'organization/'), json={
                     'label': organization['name'],
                     'managed': True,
                     'identifiers': [{
@@ -54,7 +58,7 @@ class PRASSync(object):
                         or existing['label'] != organization['full_name']\
                         or existing_tags != organization['tags']:
                     new_tags = (set(existing['tags']) - self.managed_tags) | organization['tags']
-                    session.put(existing['url'], {
+                    self.session.put(existing['url'], {
                         'label': organization['full_name'],
                         'short_label': organization['name'],
                         'tags': sorted(new_tags),
@@ -65,8 +69,7 @@ class PRASSync(object):
     def load_current_organizations(self):
         url = urljoin(settings.IDM_CORE_API_URL, 'organization/')
         while True:
-            print("N")
-            response = session.get(url)
+            response = self.session.get(url)
             response.raise_for_status()
             data = response.json()
             for org in data['results']:
